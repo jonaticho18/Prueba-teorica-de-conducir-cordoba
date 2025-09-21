@@ -113,25 +113,40 @@
     // --- Banco de preguntas (muestra) ---
     // Estructura: { q: "texto", a: ["opción A", "opción B", "opción C"], correct: 0 }
     // Fuente: Guía del Buen Conductor – Municipalidad de Córdoba.
-    const QUESTIONS = [
-      { q: "La luz amarilla intermitente del semáforo indica:", a: ["Disminuir la marcha y circular con máxima precaución.", "Prioridad de paso.", "Prohibido pasar."], correct: 0 },
-      { q: "¿Quién tiene prioridad de paso en una rotonda?", a: ["El que intenta ingresar a la misma.", "El que está circulando por la misma.", "El que egresa hacia la calle principal."], correct: 1 },
-      { q: "La banda de detención (línea transversal ancha) indica:", a: ["Cruce peatonal.", "Obligación de detener el vehículo antes de esta línea.", "Separación de carriles."], correct: 1 },
-      { q: "En curvas o pendientes, la doble línea continua indica:", a: ["Que puede adelantarse.", "Que no se puede adelantar.", "Que hay un obstáculo en el camino."], correct: 1 },
-      { q: "Velocidad máxima en avenidas de la Ciudad de Córdoba:", a: ["40 km/h", "60 km/h", "80 km/h"], correct: 1 },
-      { q: "Al girar en esquina con semáforo, los vehículos deben ceder el paso a peatones con luz verde:", a: ["Sí.", "No, el vehículo tiene prioridad.", "Sólo de noche."], correct: 0 },
-      { q: "Antes de girar a izquierda o derecha, la maniobra debe señalizarse con antelación de:", a: ["20 m", "30 m", "10 m"], correct: 1 },
-      { q: "La luz roja intermitente del semáforo significa:", a: ["Ceda el paso.", "PARE.", "Disminuir la velocidad."], correct: 1 },
-      { q: "Sin vereda, el peatón debe caminar:", a: ["Fuera de la calzada, en sentido contrario al tránsito vehicular.", "Sobre la calzada, en el mismo sentido del tránsito.", "Fuera de la calzada, en el mismo sentido del tránsito."], correct: 0 },
-      { q: "En calzada de dos o más carriles del mismo sentido, el vehículo debe:", a: ["Circular por cualquier carril.", "Circular por el izquierdo y dejar el derecho a los lentos.", "Circular por el carril derecho y usar el izquierdo sólo para adelantar."], correct: 2 }
-    ];
+    // Soporta cargar desde questions.json (205 ítems). Si falla, usa estas de muestra.
+let QUESTIONS = [
+  { q: "La luz amarilla intermitente del semáforo indica:", a: ["Disminuir la marcha y circular con máxima precaución.", "Prioridad de paso.", "Prohibido pasar."], correct: 0 },
+  { q: "¿Quién tiene prioridad de paso en una rotonda?", a: ["El que intenta ingresar a la misma.", "El que está circulando por la misma.", "El que egresa hacia la calle principal."], correct: 1 },
+  { q: "La banda de detención (línea transversal ancha) indica:", a: ["Cruce peatonal.", "Obligación de detener el vehículo antes de esta línea.", "Separación de carriles."], correct: 1 },
+  { q: "En curvas o pendientes, la doble línea continua indica:", a: ["Que puede adelantarse.", "Que no se puede adelantar.", "Que hay un obstáculo en el camino."], correct: 1 },
+  { q: "Velocidad máxima en avenidas de la Ciudad de Córdoba:", a: ["40 km/h", "60 km/h", "80 km/h"], correct: 1 },
+  { q: "Al girar en esquina con semáforo, los vehículos deben ceder el paso a peatones con luz verde:", a: ["Sí.", "No, el vehículo tiene prioridad.", "Sólo de noche."], correct: 0 },
+  { q: "Antes de girar a izquierda o derecha, la maniobra debe señalizarse con antelación de:", a: ["20 m", "30 m", "10 m"], correct: 1 },
+  { q: "La luz roja intermitente del semáforo significa:", a: ["Ceda el paso.", "PARE.", "Disminuir la velocidad."], correct: 1 },
+  { q: "Sin vereda, el peatón debe caminar:", a: ["Fuera de la calzada, en sentido contrario al tránsito vehicular.", "Sobre la calzada, en el mismo sentido del tránsito.", "Fuera de la calzada, en el mismo sentido del tránsito."], correct: 0 },
+  { q: "En calzada de dos o más carriles del mismo sentido, el vehículo debe:", a: ["Circular por cualquier carril.", "Circular por el izquierdo y dejar el derecho a los lentos.", "Circular por el carril derecho y usar el izquierdo sólo para adelantar."], correct: 2 }
+];
+
+// Intento de carga externa (por ejemplo, GitHub Pages:/questions.json)
+(async () => {
+  try {
+    const resp = await fetch('questions.json', { cache: 'no-store' });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (Array.isArray(data) && data.length > 0 && data[0].q && data[0].a) {
+        QUESTIONS = data;
+      }
+    }
+  } catch(e) { /* fallback a preguntas internas */ }
+})();
 
     // --- Estado de la app ---
     let order = [];          // orden de preguntas
-    let idx = 0;             // índice actual
-    let answers = [];        // respuestas del usuario (índice u "omitida")
-    let startTime = null;    // para el temporizador
-    let timerId = null;
+let idx = 0;             // índice actual
+let answers = [];        // respuestas del usuario (índice u "omitida")
+let startTime = null;    // para el temporizador
+let timerId = null;
+const PASS_THRESHOLD = 0.80; // 80% para aprobar
 
     // --- Utilidades ---
     const $ = (sel) => document.querySelector(sel);
@@ -217,24 +232,40 @@
     }
 
     function finish(){
-      clearInterval(timerId);
-      $('#bar').style.width = '100%';
-      $('#screen-quiz').style.display = 'none';
-      $('#screen-result').style.display = '';
+  clearInterval(timerId);
+  $('#bar').style.width = '100%';
+  $('#screen-quiz').style.display = 'none';
+  $('#screen-result').style.display = '';
 
-      const total = QUESTIONS.length;
-      let correct = 0, omitted = 0;
-      const reviewItems = [];
+  const total = QUESTIONS.length;
+  let correct = 0, omitted = 0;
+  const reviewItems = [];
 
-      QUESTIONS.forEach((q, i) => {
-        const ans = answers[i];
-        if(ans === 'omitida') omitted++;
-        else if(ans === q.correct) correct++;
+  QUESTIONS.forEach((q, i) => {
+    const ans = answers[i];
+    if(ans === 'omitida') omitted++;
+    else if(ans === q.correct) correct++;
 
-        const item = document.createElement('div');
-        const ok = ans === q.correct;
-        item.className = 'review-item ' + (ans==='omitida' ? '' : (ok?'correct':'incorrect'));
-        const userTxt = ans==='omitida' ? '<em>Omitida</em>' : `${String.fromCharCode(65+ans)}. ${q.a[ans] ?? ''}`;
+    const item = document.createElement('div');
+    const ok = ans === q.correct;
+    item.className = 'review-item ' + (ans==='omitida' ? '' : (ok?'correct':'incorrect'));
+    const userTxt = ans==='omitida' ? '<em>Omitida</em>' : `${String.fromCharCode(65+(ans??0))}. ${q.a[ans??0] ?? ''}`;
+    const rightTxt = `${String.fromCharCode(65+q.correct)}. ${q.a[q.correct]}`;
+    item.innerHTML = `<strong>${q.q}</strong><br>Tu respuesta: ${userTxt}<br>Correcta: <strong>${rightTxt}</strong>`;
+    reviewItems.push(item);
+  });
+
+  const pct = Math.round((correct/total)*100);
+  const passed = (correct/total) >= PASS_THRESHOLD;
+  const scoreEl = $('#score');
+  scoreEl.textContent = `Tu puntaje: ${correct}/${total} (${pct}%) — ${passed ? 'APROBADO' : 'NO APROBADO'}`;
+  scoreEl.className = 'score ' + (pct >= 85 ? 'good' : pct >= 60 ? 'ok' : 'bad');
+  $('#summary').innerHTML = `Tiempo: <strong>${$('#timer').textContent}</strong> • Omitidas: <strong>${omitted}</strong> • Umbral: <strong>80%</strong>`;
+
+  const list = $('#reviewList');
+  list.innerHTML = '';
+  reviewItems.forEach(el => list.appendChild(el));
+}. ${q.a[ans] ?? ''}`;
         const rightTxt = `${String.fromCharCode(65+q.correct)}. ${q.a[q.correct]}`;
         item.innerHTML = `<strong>${q.q}</strong><br>Tu respuesta: ${userTxt}<br>Correcta: <strong>${rightTxt}</strong>`;
         reviewItems.push(item);
